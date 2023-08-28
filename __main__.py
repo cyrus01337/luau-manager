@@ -1,6 +1,6 @@
 """
-TODO: Download, build and install Luau
 TODO: Track Luau versions
+TODO: Replace exits with actual values
 TODO: Make sure prerequisites are installed before building
 TODO: Stop using tempfiles - cache and build versions individually
 TODO: Include a way to avoid downloads if current version is identical to latest release
