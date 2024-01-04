@@ -1,5 +1,4 @@
 """
-TODO: Replace exits with actual values
 TODO: Prefer pathlib for path management
 TODO: Make sure prerequisites are installed before building
 TODO: Stop using tempfiles - cache and build versions individually
@@ -57,11 +56,6 @@ def set_version(version):
 def request_zipfile_url(ctx: Context):
     LUAU_LATEST_RELEASE = "https://api.github.com/repos/Roblox/luau/releases/latest"
     response = requests.get(LUAU_LATEST_RELEASE)
-
-    # TODO: Handle error appropriately
-    if not response.ok:
-        exit(os.EX_UNAVAILABLE)
-
     payload = response.json()
 
     if ctx.payload is None:
@@ -72,10 +66,6 @@ def request_zipfile_url(ctx: Context):
 
 def download_zipfile(url, *, file):
     response = requests.get(url, stream=True)
-
-    # TODO: Handle error appropriately
-    if not response.ok:
-        exit(os.EX_UNAVAILABLE)
 
     for chunk in response.iter_content(10_000):
         file.write(chunk)
