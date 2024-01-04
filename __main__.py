@@ -1,5 +1,6 @@
 """
 TODO: Replace exits with actual values
+TODO: Prefer pathlib for path management
 TODO: Make sure prerequisites are installed before building
 TODO: Stop using tempfiles - cache and build versions individually
 TODO: Setup version shims
