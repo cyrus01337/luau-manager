@@ -4,6 +4,8 @@ TODO: Make sure prerequisites are installed before building
 TODO: Stop using tempfiles - cache and build versions individually
 TODO: Setup version shims
 TODO: Type
+TODO: Add CLI support
+TODO: Setup versioning for tool
 TODO: Find out minimum Python version required
 TODO: Make easy to install
 TODO: Document
