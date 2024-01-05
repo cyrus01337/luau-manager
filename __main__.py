@@ -9,9 +9,7 @@ TODO: Find out minimum Python version required
 TODO: Make easy to install
 TODO: Document
 """
-# TODO: Only import what's functionally necessary
 import dataclasses
-import os
 import pathlib
 import subprocess
 import sys
@@ -96,16 +94,33 @@ def extract_zipfile(ctx, file, *, target_dir):
     return determine_extracted_subdir(ctx, target_dir)
 
 
-def has_cmake():
-    spawned_process_exit_code = os.system("which cmake &> /dev/null")
+def run_shell_command(command, *, cwd=pathlib.Path.cwd()):
+    try:
+        subprocess.run(command, cwd=cwd, check=True, shell=True)
+    except subprocess.CalledProcessError as error:
+        raise BuildFailed(error.output)
+    except OSError as error:
+        print(f'Failed to run command "{command}":', end="\n\n", file=sys.stderr)
 
-    return spawned_process_exit_code == SUCCESS
+        raise BuildFailed(str(error)) from error
+
+
+def has_cmake():
+    try:
+        run_shell_command("which cmake &> /dev/null")
+    except BuildFailed:
+        return False
+    else:
+        return True
 
 
 def has_make():
-    spawned_process_exit_code = os.system("which make &> /dev/null")
-
-    return spawned_process_exit_code == SUCCESS
+    try:
+        run_shell_command("which make &> /dev/null")
+    except BuildFailed:
+        return False
+    else:
+        return True
 
 
 def get_build_tool() -> str:
@@ -124,17 +139,6 @@ def determine_build_dir(build_tool, target_dir: pathlib.Path):
         return target_dir
 
     return target_dir
-
-
-def run_shell_command(command, *, cwd=pathlib.Path.cwd()):
-    try:
-        subprocess.run(command, cwd=cwd, check=True, shell=True)
-    except subprocess.CalledProcessError as error:
-        raise BuildFailed(error.output)
-    except OSError as error:
-        print(f'Failed to run command "{command}":', end="\n\n", file=sys.stderr)
-
-        raise BuildFailed(str(error)) from error
 
 
 def build_luau(target_dir: pathlib.Path):
