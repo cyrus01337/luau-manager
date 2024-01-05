@@ -1,8 +1,8 @@
 """
-TODO: Make sure prerequisites are installed before building
 TODO: Stop using tempfiles - cache and build versions individually
 TODO: Setup version shims
 TODO: Type
+TODO: Modularise
 TODO: Add CLI support
 TODO: Setup versioning for tool
 TODO: Find out minimum Python version required
@@ -16,7 +16,6 @@ import pathlib
 import subprocess
 import sys
 import tempfile
-import time
 import zipfile
 from typing import TypedDict
 
@@ -48,6 +47,14 @@ class Payload(TypedDict):
 @dataclasses.dataclass
 class Context:
     payload: Payload | None
+
+
+class InitFailed(Exception):
+    pass
+
+
+class BuildFailed(Exception):
+    pass
 
 
 def parse_version(text):
@@ -117,8 +124,7 @@ def get_build_tool() -> str:
     elif has_make():
         return MAKE
 
-    # TODO: Raise custom error exclusive for initialisation
-    raise FileNotFoundError("Missing essential build tools: cmake or make not found.")
+    raise InitFailed("Missing essential build tools: cmake or make not found.")
 
 
 def determine_build_dir(build_tool, target_dir: pathlib.Path):
@@ -131,7 +137,6 @@ def determine_build_dir(build_tool, target_dir: pathlib.Path):
 
 
 def build_luau(target_dir: pathlib.Path):
-    SUCCESS = 0
     build_tool = get_build_tool()
     build_dir = determine_build_dir(build_tool, target_dir)
     commands = BUILD_COMMANDS[build_tool]
@@ -140,18 +145,14 @@ def build_luau(target_dir: pathlib.Path):
 
     for command in commands:
         try:
-            result = subprocess.run(command, cwd=build_dir, shell=True)
-
-            # TODO: Handle error appropriately
-            if result.returncode < SUCCESS:
-                exit(os.EX_UNAVAILABLE)
-        except Exception as error:
+            subprocess.run(command, cwd=build_dir, check=True, shell=True)
+        except subprocess.CalledProcessError as error:
+            raise BuildFailed(error.output)
+        except OSError as error:
             print(f'Failed to run command "{command}":', end="\n\n", file=sys.stderr)
 
             raise error
 
-    time.sleep(600)
-    # TODO: Acknowledge additional files
     luau_filepath = build_dir / "luau"
     luau_analyze_filepath = build_dir / "luau-analyze"
 
@@ -165,14 +166,19 @@ def main():
     version = parse_version(ctx.payload["name"]) if ctx.payload else None
     cached_version = maybe_get_version()
     luau_executable = DESTINATION_DIR / "luau"
+    luau_analyse = DESTINATION_DIR / "luau-analyze"
 
     if (
         version
         and cached_version
         and version == cached_version
-        and luau_executable.exists()
+        and (luau_executable.exists() or luau_analyse.exists())
     ):
-        raise ValueError(f"Luau already exists with this version ({cached_version})")
+        existing_executable = "luau" if luau_executable.exists() else "luau-analyze"
+
+        raise InitFailed(
+            f"{existing_executable} already exists with this version ({cached_version})"
+        )
 
     with (
         tempfile.TemporaryDirectory() as temp_dir_path,
