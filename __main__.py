@@ -21,6 +21,7 @@ from typing import TypedDict
 
 import requests
 
+LUAU_LATEST_RELEASE = "https://api.github.com/repos/Roblox/luau/releases/latest"
 DESTINATION_DIR = pathlib.Path("/usr/local/bin")
 VERSION_FILE = pathlib.Path.home() / ".luau-version"
 BUILD_COMMANDS = {
@@ -46,7 +47,7 @@ class Payload(TypedDict):
 
 @dataclasses.dataclass
 class Context:
-    payload: Payload | None
+    payload: Payload
 
 
 class InitFailed(Exception):
@@ -72,17 +73,6 @@ def maybe_get_version():
 def set_version(version):
     with VERSION_FILE.open("w") as fh:
         fh.write(str(version))
-
-
-def request_zipfile_url(ctx: Context):
-    LUAU_LATEST_RELEASE = "https://api.github.com/repos/Roblox/luau/releases/latest"
-    response = requests.get(LUAU_LATEST_RELEASE)
-    payload = response.json()
-
-    if ctx.payload is None:
-        ctx.payload = payload
-
-    return payload["zipball_url"]
 
 
 def download_zipfile(url, *, file):
@@ -161,10 +151,10 @@ def build_luau(target_dir: pathlib.Path):
 
 
 def main():
-    ctx = Context(payload=None)
-    # TODO: Refactor Context initialisation
-    zipfile_url = request_zipfile_url(ctx)
-    version = parse_version(ctx.payload["name"]) if ctx.payload else None
+    response = requests.get(LUAU_LATEST_RELEASE)
+    payload = response.json()
+    ctx = Context(payload=payload)
+    version = parse_version(ctx.payload["name"])
     cached_version = maybe_get_version()
     luau_executable = DESTINATION_DIR / "luau"
     luau_analyse = DESTINATION_DIR / "luau-analyze"
@@ -188,7 +178,7 @@ def main():
         temp_dir = pathlib.Path(temp_dir_path)
 
         # sourcery skip: extract-method
-        download_zipfile(zipfile_url, file=temp_file)
+        download_zipfile(ctx.payload["zipball_url"], file=temp_file)
         temp_file.seek(0)
 
         extracted_subdir = extract_zipfile(ctx, temp_file, target_dir=temp_dir)
