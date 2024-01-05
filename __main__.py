@@ -9,19 +9,19 @@ TODO: Find out minimum Python version required
 TODO: Make easy to install
 TODO: Document
 """
-import dataclasses
-import pathlib
 import subprocess
-import sys
-import tempfile
-import zipfile
+from dataclasses import dataclass
+from pathlib import Path
+from sys import stderr
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import TypedDict
+from zipfile import PyZipFile
 
 import requests
 
 LUAU_LATEST_RELEASE = "https://api.github.com/repos/Roblox/luau/releases/latest"
-DESTINATION_DIR = pathlib.Path("/usr/local/bin")
-VERSION_FILE = pathlib.Path.home() / ".luau-version"
+DESTINATION_DIR = Path("/usr/local/bin")
+VERSION_FILE = Path.home() / ".luau-version"
 BUILD_COMMANDS = {
     "cmake": [
         "cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo",
@@ -43,7 +43,7 @@ class Payload(TypedDict):
     name: str
 
 
-@dataclasses.dataclass
+@dataclass
 class Context:
     payload: Payload
 
@@ -88,19 +88,19 @@ def determine_extracted_subdir(ctx, target_dir):
 
 
 def extract_zipfile(ctx, file, *, target_dir):
-    with zipfile.PyZipFile(file) as archive:
+    with PyZipFile(file) as archive:
         archive.extractall(path=target_dir)
 
     return determine_extracted_subdir(ctx, target_dir)
 
 
-def run_shell_command(command, *, cwd=pathlib.Path.cwd()):
+def run_shell_command(command, *, cwd=Path.cwd()):
     try:
         subprocess.run(command, cwd=cwd, check=True, shell=True)
     except subprocess.CalledProcessError as error:
         raise BuildFailed(error.output)
     except OSError as error:
-        print(f'Failed to run command "{command}":', end="\n\n", file=sys.stderr)
+        print(f'Failed to run command "{command}":', end="\n\n", file=stderr)
 
         raise BuildFailed(str(error)) from error
 
@@ -132,7 +132,7 @@ def get_build_tool() -> str:
     raise InitFailed("Missing essential build tools: cmake or make not found.")
 
 
-def determine_build_dir(build_tool, target_dir: pathlib.Path):
+def determine_build_dir(build_tool, target_dir: Path):
     if build_tool == CMAKE:
         return target_dir / "cmake"
     elif build_tool == MAKE:
@@ -141,7 +141,7 @@ def determine_build_dir(build_tool, target_dir: pathlib.Path):
     return target_dir
 
 
-def build_luau(target_dir: pathlib.Path):
+def build_luau(target_dir: Path):
     build_tool = get_build_tool()
     build_dir = determine_build_dir(build_tool, target_dir)
     commands = BUILD_COMMANDS[build_tool]
@@ -176,10 +176,10 @@ def main():
         )
 
     with (
-        tempfile.TemporaryDirectory() as temp_dir_path,
-        tempfile.NamedTemporaryFile(dir=temp_dir_path, suffix=".zip") as temp_file,
+        TemporaryDirectory() as temp_dir_path,
+        NamedTemporaryFile(dir=temp_dir_path, suffix=".zip") as temp_file,
     ):
-        temp_dir = pathlib.Path(temp_dir_path)
+        temp_dir = Path(temp_dir_path)
 
         # sourcery skip: extract-method
         download_zipfile(ctx.payload["zipball_url"], file=temp_file)
