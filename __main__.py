@@ -136,6 +136,17 @@ def determine_build_dir(build_tool, target_dir: pathlib.Path):
     return target_dir
 
 
+def run_shell_command(command, *, cwd=pathlib.Path.cwd()):
+    try:
+        subprocess.run(command, cwd=cwd, check=True, shell=True)
+    except subprocess.CalledProcessError as error:
+        raise BuildFailed(error.output)
+    except OSError as error:
+        print(f'Failed to run command "{command}":', end="\n\n", file=sys.stderr)
+
+        raise BuildFailed(str(error)) from error
+
+
 def build_luau(target_dir: pathlib.Path):
     build_tool = get_build_tool()
     build_dir = determine_build_dir(build_tool, target_dir)
@@ -144,19 +155,9 @@ def build_luau(target_dir: pathlib.Path):
     build_dir.mkdir(exist_ok=True)
 
     for command in commands:
-        try:
-            subprocess.run(command, cwd=build_dir, check=True, shell=True)
-        except subprocess.CalledProcessError as error:
-            raise BuildFailed(error.output)
-        except OSError as error:
-            print(f'Failed to run command "{command}":', end="\n\n", file=sys.stderr)
+        run_shell_command(command, cwd=build_dir)
 
-            raise error
-
-    luau_filepath = build_dir / "luau"
-    luau_analyze_filepath = build_dir / "luau-analyze"
-
-    return luau_filepath, luau_analyze_filepath
+    return build_dir
 
 
 def main():
@@ -191,11 +192,9 @@ def main():
         temp_file.seek(0)
 
         extracted_subdir = extract_zipfile(ctx, temp_file, target_dir=temp_dir)
-        luau_filepath, luau_analyze_filepath = build_luau(target_dir=extracted_subdir)
+        build_dir = build_luau(target_dir=extracted_subdir)
 
-        # TODO: Refactor
-        os.system(f"sudo cp -f {luau_filepath} {DESTINATION_DIR}")
-        os.system(f"sudo cp -f {luau_analyze_filepath} {DESTINATION_DIR}")
+        run_shell_command(f"sudo cp -f luau* {DESTINATION_DIR}", cwd=build_dir)
         set_version(version)
 
 
