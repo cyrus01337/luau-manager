@@ -1,5 +1,4 @@
 """
-TODO: Prefer pathlib for path management
 TODO: Make sure prerequisites are installed before building
 TODO: Stop using tempfiles - cache and build versions individually
 TODO: Setup version shims
@@ -13,6 +12,7 @@ TODO: Document
 # TODO: Only import what's functionally necessary
 import dataclasses
 import os
+import pathlib
 import subprocess
 import sys
 import tempfile
@@ -21,8 +21,8 @@ from typing import TypedDict
 
 import requests
 
-DESTINATION_DIR = "/usr/local/bin"
-VERSION_FILEPATH = os.path.join(os.path.expanduser("~"), ".luau-version")
+DESTINATION_DIR = pathlib.Path("/usr/local/bin")
+VERSION_FILE = pathlib.Path.home() / ".luau-version"
 
 
 class Payload(TypedDict):
@@ -42,14 +42,14 @@ def parse_version(text):
 
 def maybe_get_version():
     try:
-        with open(VERSION_FILEPATH, "r") as fh:
+        with VERSION_FILE.open("r") as fh:
             return float(fh.read().strip())
     except FileNotFoundError:
         return None
 
 
 def set_version(version):
-    with open(VERSION_FILEPATH, "w") as fh:
+    with VERSION_FILE.open("w") as fh:
         fh.write(str(version))
 
 
@@ -75,7 +75,7 @@ def determine_extracted_subdir(ctx, target_dir):
     commit_hash = ctx.payload["target_commitish"]
     shortened_hash = commit_hash[:7]
 
-    return os.path.join(target_dir, f"luau-lang-luau-{shortened_hash}")
+    return target_dir / f"luau-lang-luau-{shortened_hash}"
 
 
 def extract_zipfile(ctx, file, *, target_dir):
@@ -88,14 +88,14 @@ def extract_zipfile(ctx, file, *, target_dir):
 # TODO: Default to CMake, use Make as fallback
 def build_luau(target_dir):
     SUCCESS = 0
-    cmake_dir = os.path.join(target_dir, "cmake")
+    cmake_dir = target_dir / "cmake"
     commands = (
         "cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo",
         "cmake --build . --target Luau.Repl.CLI --config RelWithDebInfo",
         "cmake --build . --target Luau.Analyze.CLI --config RelWithDebInfo",
     )
 
-    os.mkdir(cmake_dir)
+    cmake_dir.mkdir()
 
     for command in commands:
         try:
@@ -110,8 +110,8 @@ def build_luau(target_dir):
             raise error
 
     # TODO: Acknowledge additional files
-    luau_filepath = os.path.join(cmake_dir, "luau")
-    luau_analyze_filepath = os.path.join(cmake_dir, "luau-analyze")
+    luau_filepath = cmake_dir / "luau"
+    luau_analyze_filepath = cmake_dir / "luau-analyze"
 
     return luau_filepath, luau_analyze_filepath
 
@@ -122,20 +122,22 @@ def main():
     zipfile_url = request_zipfile_url(ctx)
     version = parse_version(ctx.payload["name"]) if ctx.payload else None
     cached_version = maybe_get_version()
-    luau_executable_exists = os.path.isfile(os.path.join(DESTINATION_DIR, "luau"))
+    luau_executable = DESTINATION_DIR / "luau"
 
     if (
         version
         and cached_version
         and version == cached_version
-        and luau_executable_exists
+        and luau_executable.exists()
     ):
         raise ValueError(f"Luau already exists with this version ({cached_version})")
 
     with (
-        tempfile.TemporaryDirectory() as temp_dir,
-        tempfile.NamedTemporaryFile(dir=temp_dir, suffix=".zip") as temp_file,
+        tempfile.TemporaryDirectory() as temp_dir_path,
+        tempfile.NamedTemporaryFile(dir=temp_dir_path, suffix=".zip") as temp_file,
     ):
+        temp_dir = pathlib.Path(temp_dir_path)
+
         # sourcery skip: extract-method
         download_zipfile(zipfile_url, file=temp_file)
         temp_file.seek(0)
