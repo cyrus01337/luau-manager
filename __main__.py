@@ -16,6 +16,7 @@ import pathlib
 import subprocess
 import sys
 import tempfile
+import time
 import zipfile
 from typing import TypedDict
 
@@ -23,6 +24,19 @@ import requests
 
 DESTINATION_DIR = pathlib.Path("/usr/local/bin")
 VERSION_FILE = pathlib.Path.home() / ".luau-version"
+BUILD_COMMANDS = {
+    "cmake": [
+        "cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo",
+        "cmake --build . --target Luau.Repl.CLI --config RelWithDebInfo",
+        "cmake --build . --target Luau.Analyze.CLI --config RelWithDebInfo",
+    ],
+    "make": [
+        "make config=release luau luau-analyze",
+    ],
+}
+SUCCESS = 0
+MAKE = "make"
+CMAKE = "cmake"
 
 
 class Payload(TypedDict):
@@ -85,21 +99,48 @@ def extract_zipfile(ctx, file, *, target_dir):
     return determine_extracted_subdir(ctx, target_dir)
 
 
-# TODO: Default to CMake, use Make as fallback
-def build_luau(target_dir):
-    SUCCESS = 0
-    cmake_dir = target_dir / "cmake"
-    commands = (
-        "cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo",
-        "cmake --build . --target Luau.Repl.CLI --config RelWithDebInfo",
-        "cmake --build . --target Luau.Analyze.CLI --config RelWithDebInfo",
-    )
+def has_cmake():
+    spawned_process_exit_code = os.system("which cmake &> /dev/null")
 
-    cmake_dir.mkdir()
+    return spawned_process_exit_code == SUCCESS
+
+
+def has_make():
+    spawned_process_exit_code = os.system("which make &> /dev/null")
+
+    return spawned_process_exit_code == SUCCESS
+
+
+def get_build_tool() -> str:
+    if has_cmake():
+        return CMAKE
+    elif has_make():
+        return MAKE
+
+    # TODO: Raise custom error exclusive for initialisation
+    raise FileNotFoundError("Missing essential build tools: cmake or make not found.")
+
+
+def determine_build_dir(build_tool, target_dir: pathlib.Path):
+    if build_tool == CMAKE:
+        return target_dir / "cmake"
+    elif build_tool == MAKE:
+        return target_dir
+
+    return target_dir
+
+
+def build_luau(target_dir: pathlib.Path):
+    SUCCESS = 0
+    build_tool = get_build_tool()
+    build_dir = determine_build_dir(build_tool, target_dir)
+    commands = BUILD_COMMANDS[build_tool]
+
+    build_dir.mkdir(exist_ok=True)
 
     for command in commands:
         try:
-            result = subprocess.run(command, cwd=cmake_dir, shell=True)
+            result = subprocess.run(command, cwd=build_dir, shell=True)
 
             # TODO: Handle error appropriately
             if result.returncode < SUCCESS:
@@ -109,9 +150,10 @@ def build_luau(target_dir):
 
             raise error
 
+    time.sleep(600)
     # TODO: Acknowledge additional files
-    luau_filepath = cmake_dir / "luau"
-    luau_analyze_filepath = cmake_dir / "luau-analyze"
+    luau_filepath = build_dir / "luau"
+    luau_analyze_filepath = build_dir / "luau-analyze"
 
     return luau_filepath, luau_analyze_filepath
 
